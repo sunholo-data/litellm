@@ -1,0 +1,40 @@
+substitutions:
+  _IMAGE_NAME: terraform_managed
+  _SERVICE_NAME: litellm
+  _REGION: terraform_managed
+  _ARTIFACT_REGISTRY_REPO_URL: terraform_managed
+
+  
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    dir: application/system_services/litellm/openai-proxy
+    args: ['build', 
+            '-t', '${_ARTIFACT_REGISTRY_REPO_URL}/${_IMAGE_NAME}/${_SERVICE_NAME}', 
+            '-f', 'Dockerfile', '.',
+            '--network=cloudbuild']
+
+  - name: 'gcr.io/cloud-builders/docker'
+    dir: application/system_services/litellm/openai-proxy
+    args: ['push', '${_ARTIFACT_REGISTRY_REPO_URL}/${_IMAGE_NAME}/${_SERVICE_NAME}']
+
+  # Deploy the image to Cloud Run
+  - name: "gcr.io/cloud-builders/gcloud"
+    dir: application/system_services/litellm/openai-proxy
+    id: deploy cloud run
+    entrypoint: bash
+    args:
+      - "-c"
+      - |
+        gcloud run deploy ${_SERVICE_NAME} --image ${_ARTIFACT_REGISTRY_REPO_URL}/${_IMAGE_NAME}/${_SERVICE_NAME} \
+           --region ${_REGION} \
+           --platform managed \
+           --allow-unauthenticated \
+           --memory 15Gi \
+           --cpu 4 \
+           --min-instances 0 \
+           --max-instances 3 \
+           --timeout=10m \
+           --update-secrets=OPENAI_API_KEY=OPENAI_API_KEY:latest \
+           --set-env-vars=VERTEXAI_PROJECT=${PROJECT_NAME} \
+           --set-env-vars=HUGGINGFACE_API_KEY="" \
+           --set-env-vars=ANTHROPIC_API_KEY=""
